@@ -1,3 +1,4 @@
+// ── FIAT MAPS ──────────────────────────────────────────────────────────────
 export const currencyToCountry: Record<string, string> = {
   USD: "us", INR: "in", GBP: "gb", EUR: "eu", JPY: "jp",
   CAD: "ca", AUD: "au", CNY: "cn", SGD: "sg", AED: "ae",
@@ -35,7 +36,51 @@ export const currencySymbols: Record<string, string> = {
   SEK: "kr", NZD: "NZ$", ZAR: "R", TRY: "₺", PLN: "zł",
 };
 
+// ── CRYPTO DYNAMIC REGISTRY ────────────────────────────────────────────────
+export interface CoinGeckoCoin {
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  current_price: number;
+  market_cap_rank: number;
+  price_change_percentage_24h?: number;
+}
+
+export const cryptoCurrencies = new Set<string>();
+export const cryptoMeta: Record<string, { name: string; image: string; rank: number; change24h?: number }> = {};
+
+// Called once after CoinGecko fetch — populates crypto sets at runtime
+export function registerCrypto(coins: CoinGeckoCoin[], fiatRates: Record<string, number>) {
+  // Clear previous to avoid stale data on refresh
+  cryptoCurrencies.clear();
+  Object.keys(cryptoMeta).forEach((k) => delete cryptoMeta[k]);
+
+  coins.forEach((coin) => {
+    const rawCode = coin.symbol.toUpperCase();
+    // Prefix with "c:" if code clashes with a real fiat currency
+    const code = fiatRates[rawCode] !== undefined ? `c:${rawCode}` : rawCode;
+
+    cryptoCurrencies.add(code);
+    cryptoMeta[code] = {
+      name: coin.name,
+      image: coin.image,
+      rank: coin.market_cap_rank,
+      change24h: coin.price_change_percentage_24h,
+    };
+
+    // Also expose symbol for display
+    currencySymbols[code] = rawCode; // show ticker as symbol fallback
+    currencyNames[code] = coin.name;
+  });
+}
+
+export function isCrypto(code: string): boolean {
+  return cryptoCurrencies.has(code);
+}
+
 export function getFlagUrl(currencyCode: string): string {
+  if (isCrypto(currencyCode)) return ""; // handled separately via cryptoMeta image
   const country = currencyToCountry[currencyCode] || currencyCode.slice(0, 2).toLowerCase();
   return `https://flagcdn.com/24x18/${country}.png`;
 }

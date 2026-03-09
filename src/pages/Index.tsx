@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeftRight, RefreshCw, Zap, Loader2, Keyboard, TrendingUp } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Loader2, Keyboard } from "lucide-react";
 import { CurrencySelect } from "@/components/CurrencySelect";
 import { ConversionHistory } from "@/components/ConversionHistory";
 import { MultiCurrencyView } from "@/components/MultiCurrencyView";
@@ -9,11 +9,10 @@ import { FeeCalculator } from "@/components/FeeCalculator";
 import { FavoriteCurrencies } from "@/components/FavoriteCurrencies";
 import { CopyShareButtons } from "@/components/CopyShareButtons";
 import { PercentageChange } from "@/components/PercentageChange";
-import { QuickAmounts } from "@/components/QuickAmounts";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useKeyboardShortcuts } from "@/components/KeyboardShortcuts";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
-import { detectUserCurrency, currencySymbols, ConversionRecord } from "@/lib/currencies";
+import { detectUserCurrency, currencySymbols, ConversionRecord, isCrypto } from "@/lib/currencies";
 import { formatCurrency, getResultFontSize } from "@/lib/formatNumber";
 
 const Index = () => {
@@ -96,8 +95,18 @@ const Index = () => {
 
   const rate = getRate(fromCurrency, toCurrency);
   const amt = parseFloat(amount);
-  const formattedResult = result !== null ? formatCurrency(result) : "";
+  const formattedResult = result !== null ? formatCurrency(result, toCurrency) : "";
   const resultFontSize = getResultFontSize(formattedResult);
+
+  const fromSymbol = currencySymbols[fromCurrency] || fromCurrency;
+  const toSymbol = currencySymbols[toCurrency] || toCurrency;
+  const fromIsTicker = fromSymbol.length > 2;
+  const toIsTicker = toSymbol.length > 2;
+  const inputPaddingLeft = fromIsTicker
+    ? `${14 + fromSymbol.length * 8 + 10}px`
+    : "44px";
+
+  const displayCode = (code: string) => code.startsWith("c:") ? code.slice(2) : code;
 
   return (
     <>
@@ -138,7 +147,6 @@ const Index = () => {
           font-family: 'Outfit', sans-serif;
         }
 
-        /* ── BACKGROUND ── */
         .bg-layer {
           position: fixed;
           inset: 0;
@@ -169,7 +177,6 @@ const Index = () => {
           background: radial-gradient(ellipse 100% 100% at 50% 0%, transparent 40%, rgba(10,10,12,0.8) 100%);
         }
 
-        /* ── HEADER ── */
         .page-header {
           text-align: center;
           margin-bottom: 36px;
@@ -228,12 +235,11 @@ const Index = () => {
           font-weight: 300;
         }
 
-        /* ── MAIN CARD ── */
         .converter-card {
           background: linear-gradient(160deg, rgba(255,255,255,0.038) 0%, rgba(255,255,255,0.018) 100%);
           border: 1px solid var(--glass-border);
           border-radius: 20px;
-          padding: 32px;
+          padding: 24px;
           backdrop-filter: blur(20px);
           box-shadow:
             0 0 0 1px rgba(255,255,255,0.04) inset,
@@ -242,17 +248,19 @@ const Index = () => {
           position: relative;
           overflow: hidden;
         }
+
+        @media (min-width: 480px) {
+          .converter-card { padding: 32px; }
+        }
+
         .converter-card::before {
           content: '';
           position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
+          top: 0; left: 0; right: 0;
           height: 1px;
           background: linear-gradient(90deg, transparent, rgba(240,180,41,0.4), transparent);
         }
 
-        /* ── SECTION LABEL ── */
         .field-label {
           font-family: 'DM Mono', monospace;
           font-size: 9.5px;
@@ -264,31 +272,28 @@ const Index = () => {
           display: block;
         }
 
-        /* ── AMOUNT INPUT ── */
         .amount-wrapper {
           position: relative;
           margin-bottom: 8px;
         }
         .amount-symbol {
           position: absolute;
-          left: 16px;
           top: 50%;
           transform: translateY(-50%);
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 22px;
-          font-weight: 600;
-          color: var(--gold-400);
+          left: 14px;
           pointer-events: none;
           line-height: 1;
+          white-space: nowrap;
+          z-index: 1;
         }
         .amount-input {
           width: 100%;
           background: rgba(255,255,255,0.03);
           border: 1px solid rgba(240,180,41,0.15);
           border-radius: 12px;
-          padding: 16px 16px 16px 44px;
+          padding: 14px 14px 14px 44px;
           font-family: 'Cormorant Garamond', serif;
-          font-size: 28px;
+          font-size: clamp(20px, 5vw, 28px);
           font-weight: 600;
           color: var(--text-primary);
           outline: none;
@@ -304,7 +309,6 @@ const Index = () => {
           box-shadow: 0 0 0 3px rgba(240,180,41,0.06), 0 0 20px rgba(240,180,41,0.06);
         }
 
-        /* ── QUICK AMOUNTS ── */
         .quick-amounts {
           display: flex;
           gap: 6px;
@@ -329,24 +333,30 @@ const Index = () => {
           background: rgba(240,180,41,0.09);
         }
 
-        /* ── CURRENCY ROW ── */
+        /* ── FIXED CURRENCY ROW ── */
         .currency-row {
           display: flex;
           align-items: flex-end;
-          gap: 10px;
+          gap: 8px;
           margin-bottom: 24px;
+          width: 100%;
         }
-        .currency-row > *:not(.swap-btn-wrap) { flex: 1; }
-
-        /* ── SWAP BUTTON ── */
+        .currency-col {
+          flex: 1;
+          min-width: 0; /* critical — allows flex children to shrink below content size */
+          overflow: hidden;
+        }
         .swap-btn-wrap {
-          flex-shrink: 0;
-          margin-bottom: 2px;
+          flex: 0 0 40px; /* fixed width, never grows or shrinks */
+          display: flex;
+          align-items: flex-end;
+          padding-bottom: 2px;
         }
         .swap-btn {
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          width: 40px;
+          height: 40px;
+          min-width: 40px;
+          border-radius: 10px;
           background: linear-gradient(135deg, rgba(240,180,41,0.12), rgba(200,138,0,0.06));
           border: 1px solid rgba(240,180,41,0.25);
           color: var(--gold-400);
@@ -355,6 +365,7 @@ const Index = () => {
           justify-content: center;
           cursor: pointer;
           transition: all 0.2s;
+          flex-shrink: 0;
         }
         .swap-btn:hover {
           background: linear-gradient(135deg, rgba(240,180,41,0.22), rgba(200,138,0,0.14));
@@ -362,7 +373,6 @@ const Index = () => {
           box-shadow: 0 0 16px rgba(240,180,41,0.15);
         }
 
-        /* ── CONVERT BUTTON ── */
         .convert-btn {
           width: 100%;
           padding: 15px;
@@ -394,17 +404,21 @@ const Index = () => {
         .convert-btn:active:not(:disabled) { transform: translateY(0); }
         .convert-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* ── RESULT CARD ── */
         .result-panel {
           margin-top: 20px;
           border-radius: 14px;
           background: linear-gradient(135deg, rgba(240,180,41,0.06) 0%, rgba(200,138,0,0.03) 100%);
           border: 1px solid rgba(240,180,41,0.2);
-          padding: 20px 24px;
+          padding: 20px 16px;
           text-align: center;
           position: relative;
           overflow: hidden;
         }
+
+        @media (min-width: 480px) {
+          .result-panel { padding: 20px 24px; }
+        }
+
         .result-panel::before {
           content: '';
           position: absolute;
@@ -414,7 +428,7 @@ const Index = () => {
         }
         .result-amount {
           font-family: 'Cormorant Garamond', serif;
-          font-size: 2.8rem;
+          font-size: clamp(1.8rem, 7vw, 2.8rem);
           font-weight: 700;
           background: linear-gradient(135deg, var(--gold-300), var(--gold-400));
           -webkit-background-clip: text;
@@ -422,6 +436,7 @@ const Index = () => {
           background-clip: text;
           line-height: 1;
           margin-bottom: 6px;
+          word-break: break-all;
         }
         .result-currency-code {
           font-family: 'DM Mono', monospace;
@@ -439,14 +454,6 @@ const Index = () => {
           margin-top: 4px;
         }
 
-        /* ── DIVIDER ── */
-        .section-divider {
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(240,180,41,0.1), transparent);
-          margin: 28px 0;
-        }
-
-        /* ── FOOTER ── */
         .page-footer {
           text-align: center;
           margin-top: 24px;
@@ -502,7 +509,6 @@ const Index = () => {
           letter-spacing: 0.04em;
         }
 
-        /* ── ERROR ── */
         .error-box {
           margin-top: 16px;
           text-align: center;
@@ -529,14 +535,17 @@ const Index = () => {
         }
         .retry-btn:hover { opacity: 0.7; }
 
-        /* ── SCROLLBAR ── */
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(240,180,41,0.2); border-radius: 4px; }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
       `}</style>
 
       <div className="premium-page">
-        {/* Background layers */}
         <div className="bg-layer">
           <div className="bg-aurora" />
           <div className="bg-grid" />
@@ -546,7 +555,6 @@ const Index = () => {
         <FloatingParticles />
         <OfflineIndicator />
 
-        {/* Main content */}
         <motion.div
           initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
@@ -565,7 +573,7 @@ const Index = () => {
               <span className="live-badge-text">Live Rates</span>
             </div>
             <h1 className="page-title">Currency Converter</h1>
-            <p className="page-subtitle">Real-time exchange rates · 150+ currencies</p>
+            <p className="page-subtitle">Real-time rates · 150+ fiat · 500+ crypto</p>
           </motion.div>
 
           {/* Converter Card */}
@@ -579,8 +587,19 @@ const Index = () => {
             <div style={{ marginBottom: 20 }}>
               <label className="field-label">Amount</label>
               <div className="amount-wrapper">
-                <span className="amount-symbol">
-                  {currencySymbols[fromCurrency] || fromCurrency}
+                <span
+                  className="amount-symbol"
+                  style={{
+                    fontSize: fromIsTicker ? "11px" : "22px",
+                    fontFamily: fromIsTicker
+                      ? "'DM Mono', monospace"
+                      : "'Cormorant Garamond', serif",
+                    fontWeight: fromIsTicker ? 500 : 600,
+                    letterSpacing: fromIsTicker ? "0.05em" : "normal",
+                    color: "var(--gold-400)",
+                  }}
+                >
+                  {fromSymbol}
                 </span>
                 <input
                   ref={amountRef}
@@ -589,25 +608,37 @@ const Index = () => {
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                   className="amount-input"
+                  style={{ paddingLeft: inputPaddingLeft }}
                 />
               </div>
+
               <div className="quick-amounts">
-                {[100, 500, 1000, 5000, 10000].map((v) => (
-                  <button key={v} className="quick-chip" onClick={() => setAmount(String(v))}>
-                    {v.toLocaleString()}
+                {(isCrypto(fromCurrency)
+                  ? [0.001, 0.01, 0.1, 0.5, 1]
+                  : [100, 500, 1000, 5000, 10000]
+                ).map((v) => (
+                  <button
+                    key={v}
+                    className="quick-chip"
+                    onClick={() => setAmount(String(v))}
+                  >
+                    {isCrypto(fromCurrency) ? v : v.toLocaleString()}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Currency selectors */}
+            {/* ── FIXED CURRENCY ROW ── */}
             <div className="currency-row">
-              <CurrencySelect
-                label="From"
-                value={fromCurrency}
-                currencies={currencies}
-                onChange={setFromCurrency}
-              />
+              <div className="currency-col">
+                <CurrencySelect
+                  label="From"
+                  value={fromCurrency}
+                  currencies={currencies}
+                  onChange={setFromCurrency}
+                />
+              </div>
+
               <div className="swap-btn-wrap">
                 <motion.button
                   className="swap-btn"
@@ -616,15 +647,18 @@ const Index = () => {
                   transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                   title="Swap currencies (S)"
                 >
-                  <ArrowLeftRight size={16} />
+                  <ArrowLeftRight size={15} />
                 </motion.button>
               </div>
-              <CurrencySelect
-                label="To"
-                value={toCurrency}
-                currencies={currencies}
-                onChange={setToCurrency}
-              />
+
+              <div className="currency-col">
+                <CurrencySelect
+                  label="To"
+                  value={toCurrency}
+                  currencies={currencies}
+                  onChange={setToCurrency}
+                />
+              </div>
             </div>
 
             {/* Convert Button */}
@@ -660,15 +694,36 @@ const Index = () => {
                       animate={{ opacity: 1, y: 0 }}
                       className="result-amount"
                     >
-                      {currencySymbols[toCurrency] || ""}
-                      {formattedResult}
-                      <span className="result-currency-code">{toCurrency}</span>
+                      {toIsTicker ? (
+                        <>
+                          <span style={{
+                            fontFamily: "'DM Mono', monospace",
+                            fontSize: "1rem",
+                            letterSpacing: "0.08em",
+                            marginRight: 8,
+                            opacity: 0.8,
+                          }}>
+                            {toSymbol}
+                          </span>
+                          {formattedResult}
+                        </>
+                      ) : (
+                        <>{toSymbol}{formattedResult}</>
+                      )}
+                      <span className="result-currency-code">
+                        {displayCode(toCurrency)}
+                      </span>
                     </motion.p>
-                    {rate && (
+
+                    {rate != null && (
                       <p className="result-rate">
-                        1 {fromCurrency} = {rate.toFixed(6)} {toCurrency}
+                        1 {displayCode(fromCurrency)}
+                        {" = "}
+                        {isCrypto(toCurrency) ? rate.toFixed(8) : rate.toFixed(6)}{" "}
+                        {displayCode(toCurrency)}
                       </p>
                     )}
+
                     <PercentageChange
                       fromCurrency={fromCurrency}
                       toCurrency={toCurrency}
@@ -714,7 +769,11 @@ const Index = () => {
           )}
 
           {!isNaN(amt) && amt > 0 && (
-            <MultiCurrencyView amount={amt} fromCurrency={fromCurrency} convert={convert} />
+            <MultiCurrencyView
+              amount={amt}
+              fromCurrency={fromCurrency}
+              convert={convert}
+            />
           )}
 
           <ConversionHistory
@@ -726,7 +785,10 @@ const Index = () => {
           {/* Footer */}
           <div className="page-footer">
             <div>
-              <button className="shortcuts-toggle" onClick={() => setShowShortcuts(!showShortcuts)}>
+              <button
+                className="shortcuts-toggle"
+                onClick={() => setShowShortcuts(!showShortcuts)}
+              >
                 <Keyboard size={11} />
                 Keyboard shortcuts
               </button>

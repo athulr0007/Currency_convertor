@@ -1,16 +1,20 @@
 import { motion } from "framer-motion";
+import { isCrypto } from "@/lib/currencies";
 
 interface Props {
   onSelect: (amount: string) => void;
   fromCurrency: string;
 }
 
-const QUICK_AMOUNTS = [100, 500, 1000, 5000, 10000];
+const FIAT_AMOUNTS = [100, 500, 1000, 5000, 10000];
+const CRYPTO_AMOUNTS = [0.001, 0.01, 0.1, 0.5, 1];
 
 export function QuickAmounts({ onSelect, fromCurrency }: Props) {
+  const amounts = isCrypto(fromCurrency) ? CRYPTO_AMOUNTS : FIAT_AMOUNTS;
+
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
-      {QUICK_AMOUNTS.map((amt, i) => (
+      {amounts.map((amt, i) => (
         <motion.button
           key={amt}
           initial={{ opacity: 0, y: 5 }}
@@ -20,7 +24,7 @@ export function QuickAmounts({ onSelect, fromCurrency }: Props) {
           onClick={() => onSelect(String(amt))}
           className="px-3 py-1 rounded-full bg-muted/50 border border-glass-border text-xs font-heading text-muted-foreground hover:text-primary hover:border-primary/40 transition-all"
         >
-          {amt.toLocaleString()}
+          {isCrypto(fromCurrency) ? amt : amt.toLocaleString()}
         </motion.button>
       ))}
     </div>
