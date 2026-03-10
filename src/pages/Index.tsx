@@ -601,15 +601,21 @@ const Index = () => {
                 >
                   {fromSymbol}
                 </span>
-                <input
-                  ref={amountRef}
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="amount-input"
-                  style={{ paddingLeft: inputPaddingLeft }}
-                />
+            <input
+  ref={amountRef}
+  type="number"
+  min="0"
+  value={amount}
+  onChange={(e) => {
+    const val = e.target.value;
+    if (val === "" || parseFloat(val) >= 0) {
+      setAmount(val);
+    }
+  }}
+  placeholder="0.00"
+  className="amount-input"
+  style={{ paddingLeft: inputPaddingLeft }}
+/>
               </div>
 
               <div className="quick-amounts">
