@@ -16,7 +16,6 @@ export function useCurrencyRates() {
   const isFetchingRef = useRef(false);
 
   const fetchRates = useCallback(async () => {
-    // Prevent concurrent fetches
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
 
@@ -30,11 +29,9 @@ export function useCurrencyRates() {
 
       let allCoins: CoinGeckoCoin[] = [];
       try {
-        // Fetch only page 1 (250 coins) to avoid rate limiting
-        // Add delay between pages if fetching multiple
+        // Page 1 — via Vercel serverless function
         const page1Res = await fetch(
-          `/coingecko/api/v3/coins/markets` +
-          `?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false`,
+          `/api/coingecko?path=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false`,
           { headers: { "Accept": "application/json" } }
         );
 
@@ -48,12 +45,12 @@ export function useCurrencyRates() {
             (c: CoinGeckoCoin) => c && c.current_price != null
           );
 
-          // Fetch page 2 with a delay to avoid 429
+          // Delay before page 2 to avoid 429
           await new Promise((resolve) => setTimeout(resolve, 1500));
 
+          // Page 2 — via Vercel serverless function
           const page2Res = await fetch(
-            `/coingecko/api/v3/coins/markets` +
-            `?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false`,
+            `/api/coingecko?path=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=false`,
             { headers: { "Accept": "application/json" } }
           );
 
@@ -88,15 +85,15 @@ export function useCurrencyRates() {
       setRates(mergedRates);
       setCryptoCoins(allCoins);
 
-      // ✅ Only update currencies list if keys actually changed
-      // This prevents dropdown from blinking on every refresh
+      // Only update currencies list if keys actually changed
+      // prevents dropdown blinking on every refresh
       setCurrencies((prev) => {
         const next = Object.keys(mergedRates);
         if (
           prev.length === next.length &&
           next.every((k, i) => k === prev[i])
         ) {
-          return prev; // same reference = no re-render
+          return prev;
         }
         return next;
       });
@@ -112,7 +109,7 @@ export function useCurrencyRates() {
 
   useEffect(() => {
     fetchRates();
-    // Refresh every 2 minutes instead of 30s to avoid 429
+    // Refresh every 2 minutes to avoid 429
     intervalRef.current = setInterval(fetchRates, 120_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -144,6 +141,6 @@ export function useCurrencyRates() {
     fetchRates,
     convert,
     getRate,
-    currencies, // now stable — only changes when keys actually differ
+    currencies,
   };
 }
